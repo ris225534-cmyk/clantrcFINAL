@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>THE RICE EMPIRE | TRC 5.7 ULTIMATE</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@300;500;700&display=swap');
+
+        :root {
+            /* Основная палитра Империи */
+            --gold: #d4af37; 
+            --gold-l: #f1c40f; 
+            --bg: #0a0a0a; 
+            --card-bg: #141414;
+            --text-main: #f9f7f2; 
+            --text-muted: #888; 
+            --border: rgba(212, 175, 55, 0.4);
+            --glow-gold: 0 0 15px rgba(212, 175, 55, 0.6);
+            
+            /* Редкости с неоновым свечением */
+            --rarity-common: #bdc3c7; 
+            --rarity-rare: #3498db; 
+            --rarity-epic: #9b59b6;
+            --rarity-legendary: #f39c12; 
+            --rarity-mythic: #e74c3c;
+            
+            --transition: 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        [data-theme="light"] {
+            --bg: #f4f1ea; 
+            --card-bg: #ffffff; 
+            --text-main: #1a1a1a;
+            --text-muted: #555; 
+            --border: rgba(212, 175, 55, 0.3);
+            --glow-gold: 0 5px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--bg); 
+            color: var(--text-main);
+            transition: background var(--transition), color var(--transition);
+            overflow-x: hidden; 
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* АНИМАЦИИ ГЛОБАЛЬНЫЕ */
+        @keyframes gradientFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes floatUpDown {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+            100% { transform: translateY(0px); }
+        }
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            15% { transform: scale(1.05); }
+            30% { transform: scale(1); }
+            45% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* КАНВАС РИСА */
+        #riceCanvas { 
+            position: fixed; top: 0; left: 0; 
+            pointer-events: none; z-index: 1; opacity: 0.7; 
+        }
+
+        /* ЗОЛОТАЯ РИСИНКА (ОСОБАЯ) */
+        .golden-grain {
+            position: fixed; width: 45px; height: 65px;
+            background: radial-gradient(ellipse at center, #fff 0%, var(--gold-l) 70%, var(--gold) 100%);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            z-index: 9999; cursor: pointer;
+            box-shadow: 0 0 40px var(--gold-l), inset 0 0 15px #fff;
+            animation: fallRotate 8s linear forwards, pulseGlow 1s infinite alternate;
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+            font-size: 10px; color: #000; font-weight: 900; border: 2px solid #fff;
+        }
+        .golden-grain i { font-size: 14px; margin-bottom: 2px; }
+        
+        @keyframes pulseGlow { 
+            0% { box-shadow: 0 0 20px var(--gold-l); transform: scale(1); } 
+            100% { box-shadow: 0 0 50px var(--gold-l), 0 0 20px #fff; transform: scale(1.2); } 
+        }
+        @keyframes fallRotate {
+            0% { transform: translateY(-100px) rotate(0deg) scale(1); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(110vh) rotate(1080deg) scale(0.8); opacity: 0; }
+        }
+
+        /* АВТОРИЗАЦИЯ */
+        #authScreen { 
+            position: fixed; inset: 0; background: var(--bg); 
+            z-index: 20000; display: flex; align-items: center; justify-content: center; 
+            transition: var(--transition); padding: 20px;
+        }
+        .auth-card { 
+            background: var(--card-bg); padding: 50px 30px; 
+            border-radius: 30px; border-top: 8px solid var(--gold); 
+            box-shadow: var(--glow-gold), 0 30px 60px rgba(0,0,0,0.8); 
+            text-align: center; width: 100%; max-width: 400px; 
+            animation: floatUpDown 6s ease-in-out infinite;
+        }
+
+        /* НАВИГАЦИЯ */
+        nav { 
+            background: var(--card-bg); display: flex; justify-content: flex-start; 
+            border-bottom: 2px solid var(--gold); position: sticky; top: 0; z-index: 10000; 
+            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+            overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+        }
+        nav::-webkit-scrollbar { display: none; }
+        
+        .nav-link { 
+            padding: 20px 25px; cursor: pointer; font-family: 'Orbitron'; font-size: 11px; 
+            transition: var(--transition); color: var(--text-muted); 
+            border-bottom: 4px solid transparent; letter-spacing: 1px; font-weight: 900; 
+            white-space: nowrap; display: flex; align-items: center; gap: 8px;
+        }
+        .nav-link:hover { color: var(--gold-l); }
+        .nav-link.active { 
+            color: var(--gold); background: rgba(212, 175, 55, 0.1); 
+            border-bottom-color: var(--gold); box-shadow: inset 0 -10px 20px -10px var(--gold);
+        }
+        .theme-toggle { 
+            display: flex; align-items: center; padding: 0 25px; 
+            cursor: pointer; color: var(--gold); font-size: 18px; transition: 0.3s; 
+        }
+        .theme-toggle:hover { transform: rotate(45deg) scale(1.2); }
+
+        /* КОНТЕЙНЕРЫ И КАРТОЧКИ */
+        .container { 
+            max-width: 1200px; margin: 30px auto; padding: 0 20px 100px 20px; 
+            display: none; position: relative; z-index: 5; 
+        }
+        .active-tab { display: block; animation: tabFadeIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        @keyframes tabFadeIn { from { opacity: 0; transform: translateY(30px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        .card { 
+            background: var(--card-bg); border-radius: 24px; padding: 25px; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3); border: 1px solid var(--border); 
+            margin-bottom: 25px; transition: var(--transition);
+        }
+        .card:hover { border-color: var(--gold); box-shadow: var(--glow-gold); transform: translateY(-2px); }
+
+        /* ПРОФИЛЬ СЕТКА */
+        .profile-grid { display: flex; flex-direction: column; gap: 25px; }
+        @media (min-width: 900px) { 
+            .profile-grid { flex-direction: row; } 
+            .profile-side { width: 360px; position: sticky; top: 90px; } 
+            .profile-main { flex: 1; } 
+        }
+
+        .u-avatar { 
+            width: 140px; height: 140px; border-radius: 50%; 
+            border: 4px solid var(--gold); margin: 0 auto 20px; 
+            display: block; background: #fff; padding: 5px;
+            box-shadow: var(--glow-gold); transition: 0.5s;
+        }
+        .u-avatar:hover { transform: rotate(360deg); }
+
+        .badge { 
+            font-size: 10px; padding: 6px 14px; border-radius: 8px; 
+            background: linear-gradient(45deg, var(--gold), var(--gold-l)); 
+            color: #000; font-weight: 900; text-transform: uppercase; 
+            letter-spacing: 2px; box-shadow: var(--glow-gold); display: inline-block;
+        }
+
+        /* КНОПКИ */
+        button { 
+            background: linear-gradient(45deg, var(--gold), var(--gold-l)); 
+            color: #000; border: none; padding: 16px 25px; 
+            border-radius: 15px; font-family: 'Orbitron'; font-size: 12px; 
+            cursor: pointer; transition: 0.3s; font-weight: 900; 
+            text-transform: uppercase; letter-spacing: 1px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            box-shadow: 0 5px 15px rgba(212, 175, 55, 0.4);
+        }
+        button:hover { 
+            transform: translateY(-3px) scale(1.02); 
+            box-shadow: 0 10px 25px rgba(212, 175, 55, 0.6); 
+            background: linear-gradient(45deg, var(--gold-l), var(--gold));
+        }
+        button:active { transform: scale(0.95); }
+        button:disabled { background: #444; color: #777; cursor: not-allowed; box-shadow: none; transform: none; }
+
+        .btn-claim { animation: heartbeat 2s infinite; border: 2px solid #fff; }
+
+        /* INPUTS */
+        input, select { 
+            background: rgba(255,255,255,0.04); color: var(--text-main); 
+            padding: 16px 20px; border: 1px solid var(--border); 
+            border-radius: 15px; width: 100%; margin-bottom: 15px; 
+            font-size: 14px; outline: none; transition: 0.3s; 
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+        input:focus, select:focus { 
+            border-color: var(--gold); background: rgba(255,255,255,0.08); 
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+        }
+
+        /* ИНВЕНТАРЬ И РЫНОК */
+        .filter-bar { display: flex; gap: 10px; margin-bottom: 25px; flex-wrap: wrap; }
+        .filter-btn { 
+            background: var(--card-bg); border: 1px solid var(--border); 
+            color: var(--text-muted); padding: 10px 20px; 
+            border-radius: 12px; cursor: pointer; font-size: 10px; 
+            font-weight: 900; transition: 0.3s; font-family: 'Orbitron'; box-shadow: none;
+        }
+        .filter-btn.active { 
+            background: var(--gold); color: #000; border-color: var(--gold); 
+            box-shadow: var(--glow-gold); transform: translateY(-2px); 
+        }
+
+        .grid-list { 
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; 
+        }
+        @media (max-width: 500px) { .grid-list { grid-template-columns: 1fr 1fr; gap: 12px; } }
+
+        .item-box { 
+            background: rgba(255,255,255,0.02); border: 1px solid var(--border); 
+            border-radius: 20px; padding: 20px; text-align: center; 
+            transition: var(--transition); position: relative; overflow: hidden;
+        }
+        .item-box::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent);
+            transform: skewX(-20deg); transition: 0.5s;
+        }
+        .item-box:hover::before { left: 150%; }
+        .item-box:hover { transform: translateY(-8px); box-shadow: 0 15px 30px rgba(0,0,0,0.5); }
+
+        /* BATTLE PASS XP */
+        .xp-wrap { 
+            background: #000; height: 28px; border-radius: 14px; 
+            border: 2px solid var(--border); overflow: hidden; margin: 20px 0; 
+            box-shadow: inset 0 5px 10px rgba(0,0,0,0.8); position: relative;
+        }
+        .xp-fill { 
+            height: 100%; width: 0%; 
+            background: linear-gradient(90deg, #b8860b, var(--gold-l), #fff); 
+            background-size: 200% 200%;
+            animation: gradientFlow 3s ease infinite;
+            transition: width 1.5s cubic-bezier(0.2, 0.8, 0.2, 1); 
+            box-shadow: 0 0 20px var(--gold-l);
+        }
+
+        /* КВЕСТЫ */
+        .quest-card {
+            background: rgba(212, 175, 55, 0.05); border: 1px dashed var(--gold); 
+            border-radius: 18px; padding: 20px; display: flex; 
+            justify-content: space-between; align-items: center; transition: 0.3s;
+        }
+        .quest-card:hover { background: rgba(212, 175, 55, 0.1); transform: scale(1.02); }
+
+        /* ЧАТ */
+        #chatBox { 
+            height: 450px; overflow-y: auto; background: rgba(0,0,0,0.6); 
+            padding: 20px; border-radius: 20px; display: flex; flex-direction: column; 
+            gap: 15px; border: 1px solid var(--border); box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+        .msg { 
+            padding: 15px; border-radius: 18px; background: var(--card-bg); 
+            font-size: 13px; max-width: 85%; word-wrap: break-word; 
+            border-left: 4px solid var(--gold); box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            animation: slideInLeft 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-30px) scale(0.9); } to { opacity: 1; transform: translateX(0) scale(1); } }
+        .msg.bot { border-left-color: var(--rarity-rare); background: rgba(52, 152, 219, 0.08); border-right: 1px solid var(--rarity-rare); }
+        .msg.admin { border-left-color: var(--rarity-mythic); background: rgba(231, 76, 60, 0.08); border-right: 1px solid var(--rarity-mythic); }
+
+        /* УВЕДОМЛЕНИЯ */
+        #toastContainer { position: fixed; bottom: 30px; right: 20px; z-index: 30000; pointer-events: none; display: flex; flex-direction: column; gap: 10px; }
+        .toast { 
+            background: var(--card-bg); color: var(--text-main); 
+            padding: 15px 25px; border-radius: 12px; border-left: 6px solid var(--gold); 
+            font-weight: 900; font-size: 12px; font-family: 'Orbitron'; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8); pointer-events: auto; 
+            animation: toastIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; display: flex; align-items: center; gap: 10px;
+        }
+        @keyframes toastIn { from { transform: translateX(150%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* АДМИНКА ЛОГИ */
+        #kernelLogs { 
+            background: #050505; color: #0f0; font-family: 'Courier New', monospace; 
+            padding: 20px; height: 300px; overflow-y: auto; font-size: 12px; 
+            border: 1px solid #333; border-radius: 15px; box-shadow: inset 0 0 20px #000;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="riceCanvas"></canvas>
+
+<div id="toastContainer"></div>
+
+<div id="authScreen">
+    <div class="auth-card">
+        <i class="fas fa-crown" style="font-size: 40px; color: var(--gold); margin-bottom: 15px; animation: floatUpDown 3s infinite;"></i>
+        <h1 style="font-family:'Orbitron'; color:var(--gold); margin:0; font-size:36px; text-shadow: var(--glow-gold);">TRC 5.7</h1>
+        <p style="font-size:11px; letter-spacing:6px; margin-bottom:35px; color:var(--text-muted); font-weight:900;">ULTIMATE DOMINION</p>
+        
+        <div style="position: relative;">
+            <i class="fas fa-user" style="position: absolute; left: 20px; top: 18px; color: var(--text-muted);"></i>
+            <input type="text" id="authNick" placeholder="NICKNAME" style="padding-left: 45px;">
+        </div>
+        <div style="position: relative;">
+            <i class="fas fa-lock" style="position: absolute; left: 20px; top: 18px; color: var(--text-muted);"></i>
+            <input type="password" id="authPass" placeholder="PASSWORD" style="padding-left: 45px;">
+        </div>
+        
+        <button onclick="handleAuth()" style="width:100%; margin-top:15px; font-size: 14px;"><i class="fas fa-sign-in-alt"></i> ENTER EMPIRE</button>
+    </div>
+</div>
+
+<nav>
+    <div class="nav-link active" onclick="switchTab('profile', this)"><i class="fas fa-user-astronaut"></i> PROFILE</div>
+    <div class="nav-link" onclick="switchTab('market', this)"><i class="fas fa-store"></i> MARKET</div>
+    <div class="nav-link" onclick="switchTab('bp', this)"><i class="fas fa-scroll"></i> BATTLE PASS</div>
+    <div class="nav-link" onclick="switchTab('chat', this)"><i class="fas fa-comments"></i> CHAT</div>
+    <div id="adminLink" class="nav-link" style="display:none; color:var(--gold-l)" onclick="switchTab('admin', this)"><i class="fas fa-chess-king"></i> OVERLORD</div>
+    <div class="theme-toggle" onclick="toggleTheme()" title="Toggle Theme"><i class="fas fa-adjust"></i></div>
+    <div class="nav-link" onclick="logout()" style="color:var(--rarity-mythic); margin-left: auto;"><i class="fas fa-power-off"></i> EXIT</div>
+</nav>
+
+<div id="profile" class="container active-tab">
+    <div class="profile-grid">
+        <div class="profile-side card" style="text-align:center;">
+            <img id="uAvatar" class="u-avatar" src="">
+            <h2 id="uName" style="font-family:'Orbitron'; font-size:24px; margin-bottom: 5px;">---</h2>
+            <div id="uRole" class="badge" style="margin-bottom:25px;">УЧАСТНИК</div>
+            
+            <div style="background: rgba(0,0,0,0.3); border-radius: 15px; padding: 20px; border: 1px solid var(--border); margin-bottom: 25px;">
+                <div style="font-size:10px; color:var(--text-muted); font-weight:900; letter-spacing: 2px;">BALANCE</div>
+                <div style="font-size:42px; font-weight:900; color:var(--gold); text-shadow: var(--glow-gold);">
+                    <span id="uBal">0</span> <i class="fas fa-coins" style="font-size: 20px;"></i>
+                </div>
+            </div>
+            
+            <button onclick="claimDaily()" id="dailyBtn" class="btn-claim"><i class="fas fa-gift"></i> CLAIM DAILY BONUS</button>
+        </div>
+        
+        <div class="profile-main card">
+            <h3 style="font-family:'Orbitron'; margin-top:0; border-bottom:2px solid var(--border); padding-bottom:15px; display:flex; align-items:center; gap:10px;">
+                <i class="fas fa-box-open" style="color:var(--gold);"></i> MY INVENTORY
+            </h3>
+            
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="setInvFilter('All', this)"><i class="fas fa-layer-group"></i> ALL</button>
+                <button class="filter-btn" onclick="setInvFilter('Common', this)" style="color: var(--rarity-common);"><i class="fas fa-circle"></i> COMMON</button>
+                <button class="filter-btn" onclick="setInvFilter('Rare', this)" style="color: var(--rarity-rare);"><i class="fas fa-square"></i> RARE</button>
+                <button class="filter-btn" onclick="setInvFilter('Epic', this)" style="color: var(--rarity-epic);"><i class="fas fa-star"></i> EPIC</button>
+                <button class="filter-btn" onclick="setInvFilter('Legendary', this)" style="color: var(--rarity-legendary);"><i class="fas fa-fire"></i> LEGENDARY</button>
+                <button class="filter-btn" onclick="setInvFilter('Mythic', this)" style="color: var(--rarity-mythic);"><i class="fas fa-dragon"></i> MYTHIC</button>
+            </div>
+            
+            <div id="uInventory" class="grid-list"></div>
+        </div>
+    </div>
+</div>
+
+<div id="bp" class="container">
+    <div class="card" style="border: 2px solid var(--gold); box-shadow: var(--glow-gold); position: relative; overflow: hidden;">
+        <i class="fas fa-khanda" style="position: absolute; right: -20px; top: -20px; font-size: 150px; opacity: 0.05; color: var(--gold);"></i>
+        
+        <h2 style="font-family:'Orbitron'; margin-top:0; display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fas fa-shield-alt"></i> BATTLE PROGRESS</span>
+            <span style="color:var(--gold); font-size: 28px;">LVL <span id="uLevel">1</span></span>
+        </h2>
+        
+        <div class="xp-wrap"><div id="uXPBar" class="xp-fill"></div></div>
+        <p id="uXPText" style="text-align:right; font-size:12px; font-weight:900; color: var(--text-muted);">0 / 1000 XP TO NEXT RANK</p>
+        
+        <h3 style="font-family:'Orbitron'; margin-top:40px; color:var(--gold); display:flex; align-items:center; gap:10px;">
+            <i class="fas fa-tasks"></i> ACTIVE QUESTS
+        </h3>
+        <div id="questContainer" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px; margin-top:15px;"></div>
+    </div>
+</div>
+
+<div id="market" class="container">
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px; flex-wrap:wrap; gap:15px;">
+            <h2 style="font-family:'Orbitron'; margin:0;"><i class="fas fa-shopping-bag" style="color:var(--gold);"></i> IMPERIAL MARKET</h2>
+            <div id="shopTimer" style="font-weight:900; font-family:'Orbitron'; background:rgba(212,175,55,0.1); border: 1px solid var(--gold); padding:10px 20px; border-radius:15px; box-shadow: var(--glow-gold);">CLOSED</div>
+        </div>
+        <div id="shopGrid" class="grid-list"></div>
+    </div>
+</div>
+
+<div id="chat" class="container">
+    <div class="card">
+        <h3 style="font-family:'Orbitron'; margin-top:0; border-bottom: 1px solid var(--border); padding-bottom:15px;"><i class="fas fa-globe"></i> GLOBAL CHAT</h3>
+        <div id="chatBox"></div>
+        <div style="margin-top:20px; display:flex; gap:12px; align-items:center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 20px; border: 1px solid var(--border);">
+            <i class="fas fa-keyboard" style="color: var(--gold); font-size: 20px; padding-left: 10px;"></i>
+            <input type="text" id="chatInput" placeholder="Message Sensei or Clan..." style="margin:0; border:none; background:transparent; box-shadow:none;" onkeypress="if(event.key==='Enter') sendChat()">
+            <button onclick="sendChat()" style="width:60px; height: 50px; border-radius: 12px; padding:0;"><i class="fas fa-paper-plane" style="font-size: 18px;"></i></button>
+        </div>
+        <p style="font-size:11px; color:var(--text-muted); margin-top:15px; text-align:center;">Бот команды: <b style="color:var(--gold)">!совет, !курс, !инфо</b></p>
+    </div>
+</div>
+
+<div id="admin" class="container">
+    <div class="card" style="border-left:10px solid #27ae60; background: linear-gradient(90deg, rgba(39, 174, 96, 0.1), transparent);">
+        <h3 style="font-family:'Orbitron'; margin-top:0;"><i class="fas fa-hand-holding-usd"></i> PENDING WITHDRAWALS</h3>
+        <div id="withdrawRequestsList"></div>
+    </div>
+
+    <div class="card" style="border: 1px solid var(--rarity-mythic);">
+        <h2 style="font-family:'Orbitron'; text-align:center; color:var(--rarity-mythic); text-shadow: 0 0 10px rgba(231, 76, 60, 0.5);"><i class="fas fa-skull"></i> OVERLORD CONTROL PANEL</h2>
+        
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:40px; margin-top:35px;">
+            <div style="background: rgba(0,0,0,0.3); padding: 25px; border-radius: 20px; border: 1px solid #333;">
+                <h4 style="margin-top:0; color: var(--gold);"><i class="fas fa-coins"></i> ECONOMY & ROLES</h4>
+                <input type="text" id="admUser" placeholder="Target Nickname">
+                <input type="number" id="admAmount" placeholder="TRC Amount">
+                <div style="display:flex; gap:10px; margin-bottom:25px;">
+                    <button onclick="admEconomy(true)"><i class="fas fa-plus"></i> GRANT</button>
+                    <button onclick="admEconomy(false)" style="background:#444;"><i class="fas fa-minus"></i> REVOKE</button>
+                </div>
+
+                <select id="admRoleSelect">
+                    <option value="Участник">Участник</option>
+                    <option value="Крестьянин">Крестьянин</option>
+                    <option value="Торговец">Торговец</option>
+                    <option value="Мастер">Мастер</option>
+                    <option value="Модератор">Модератор</option>
+                    <option value="Зам. Вождя">Зам. Вождя</option>
+                    <option value="Вождь">Вождь</option>
+                    <option value="Админ">Админ</option>
+                    <option value="Император">Император</option>
+                </select>
+                <button onclick="admSetRole()" style="margin-bottom:10px;"><i class="fas fa-user-tag"></i> UPDATE ROLE</button>
+                <button onclick="admDeleteUser()" style="background:var(--rarity-mythic);"><i class="fas fa-trash-alt"></i> PURGE USER</button>
+            </div>
+            
+            <div style="background: rgba(0,0,0,0.3); padding: 25px; border-radius: 20px; border: 1px solid #333;">
+                <h4 style="margin-top:0; color: var(--gold);"><i class="fas fa-store-alt"></i> MARKET CONTROL</h4>
+                <input type="text" id="shName" placeholder="Item Name">
+                <input type="number" id="shPrice" placeholder="Price (TRC)">
+                <input type="number" id="shStock" placeholder="Stock Quantity">
+                <select id="shRarity">
+                    <option value="Common">Common</option>
+                    <option value="Rare">Rare</option>
+                    <option value="Epic">Epic</option>
+                    <option value="Legendary">Legendary</option>
+                    <option value="Mythic">Mythic</option>
+                </select>
+                <button onclick="admAddItem()" style="margin-bottom:15px;"><i class="fas fa-cart-plus"></i> ADD TO MARKET</button>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="admToggleShop()" style="background:#444;"><i class="fas fa-power-off"></i> TOGGLE</button>
+                    <button onclick="admClearShop()" style="background:var(--rarity-mythic);"><i class="fas fa-bomb"></i> WIPE</button>
+                </div>
+            </div>
+        </div>
+        
+        <h4 style="margin-top:40px; font-family:'Orbitron';"><i class="fas fa-terminal"></i> KERNEL LOGS:</h4>
+        <div id="kernelLogs"></div>
+    </div>
+</div>
+
+<script>
+// --- КОНФИГУРАЦИЯ FIREBASE ---
+const firebaseConfig = {
+    apiKey: "AIzaSyDSotXIeWIPZmohcUkjEQph1sc8pfaFvHE",
+    authDomain: "clantrc-62099.firebaseapp.com",
+    databaseURL: "https://clantrc-62099-default-rtdb.firebaseio.com",
+    projectId: "clantrc-62099",
+    storageBucket: "clantrc-62099.firebasestorage.app",
+    messagingSenderId: "1056897976845",
+    appId: "1:1056897976845:web:2f241821484ec71162a344"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let currentUser = localStorage.getItem('trc_session') || null;
+let globalData = {};
+let invFilter = 'All';
+let lastChatTime = 0;
+
+// УТИЛИТЫ
+function hash(s) { return CryptoJS.SHA256(s).toString(); }
+
+function showToast(msg, type = 'gold') {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.borderLeftColor = `var(--${type})`;
+    t.innerHTML = `<i class="fas fa-bell" style="color:var(--${type}); font-size:16px;"></i> <span>${msg}</span>`;
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => {
+        t.style.animation = "toastIn 0.5s reverse forwards";
+        setTimeout(() => t.remove(), 500);
+    }, 4500);
+}
+
+// КВЕСТЫ
+const questPool = [
+    { id: 'msg', text: "Написать 5 сообщений в чат", goal: 5, xp: 150, icon: 'fa-comment-dots' },
+    { id: 'daily', text: "Забрать ежедневный бонус", goal: 1, xp: 100, icon: 'fa-gift' },
+    { id: 'buy', text: "Приобрести товар на рынке", goal: 1, xp: 250, icon: 'fa-shopping-cart' },
+    { id: 'gold', text: "Поймать золотой рис (TRC)", goal: 1, xp: 200, icon: 'fa-gem' }
+];
+
+function generateQuest() {
+    const q = questPool[Math.floor(Math.random() * questPool.length)];
+    return { ...q, prog: 0 };
+}
+
+function updateQuestProgress(type, amount = 1) {
+    if (!currentUser) return;
+    db.ref(`users/${currentUser}/quests`).transaction(quests => {
+        if (!quests) return quests;
+        let changed = false;
+        quests.forEach((q, idx) => {
+            if (q.id === type && q.prog < q.goal) {
+                q.prog += amount;
+                changed = true;
+                if (q.prog >= q.goal) {
+                    showToast(`QUEST COMPLETED: +${q.xp} XP`, "gold-l");
+                    addXP(q.xp);
+                    quests[idx] = generateQuest(); 
+                }
+            }
+        });
+        return changed ? quests : undefined;
+    });
+}
+
+// ОПЫТ
+function addXP(amount) {
+    db.ref(`users/${currentUser}`).transaction(u => {
+        if (u) {
+            let oldXP = u.xp || 0;
+            let newXP = oldXP + amount;
+            let oldLvl = Math.floor(oldXP / 1000) + 1;
+            let newLvl = Math.floor(newXP / 1000) + 1;
+
+            if (newLvl > oldLvl) {
+                for (let l = oldLvl + 1; l <= newLvl; l++) {
+                    if (l === 100) { u.bal += 500; showToast("💯 LEVEL 100 GRAND BONUS! +500 TRC", "rarity-mythic"); }
+                    else if (l % 10 === 0) { u.bal += 100; showToast(`🎉 LEVEL ${l} REACHED! +100 TRC`, "gold"); }
+                    else if (l % 5 === 0) { u.bal += 50; showToast(`⭐ LEVEL ${l} REACHED! +50 TRC`, "gold-l"); }
+                    else { showToast(`LEVEL UP! You are now LVL ${l}`, "rarity-rare"); }
+                }
+            }
+            u.xp = newXP;
+            return u;
+        }
+    });
+}
+
+// АВТОРИЗАЦИЯ
+function handleAuth() {
+    const nick = document.getElementById('authNick').value.trim();
+    const pass = document.getElementById('authPass').value;
+    if (!nick || !pass) return showToast("FILL ALL FIELDS!", "rarity-mythic");
+    const hPass = hash(pass);
+
+    db.ref('users/' + nick).once('value', s => {
+        const u = s.val();
+        if (!u) {
+            db.ref('users/' + nick).set({
+                pass: hPass, bal: 500, xp: 0, role: "Участник", lastDaily: 0,
+                quests: [generateQuest(), generateQuest()]
+            });
+            init(nick);
+        } else if (u.pass === hPass) {
+            init(nick);
+        } else {
+            showToast("INVALID PASSWORD!", "rarity-mythic");
+        }
+    });
+}
+
+function init(nick) {
+    currentUser = nick;
+    localStorage.setItem('trc_session', nick);
+    document.getElementById('authScreen').style.opacity = '0';
+    setTimeout(() => document.getElementById('authScreen').style.display = 'none', 500);
+    
+    db.ref().on('value', s => {
+        globalData = s.val() || {};
+        checkExpirations();
+        render();
+    });
+
+    setInterval(spawnGoldenGrain, 60000); // Спавн золотого риса раз в 60 сек
+}
+
+function checkExpirations() {
+    const now = Date.now();
+    if (globalData.users) {
+        Object.entries(globalData.users).forEach(([nick, u]) => {
+            if (u.inv) {
+                Object.entries(u.inv).forEach(([id, it]) => {
+                    if (it.expire && now > it.expire) db.ref(`users/${nick}/inv/${id}`).remove();
+                });
+            }
+        });
+    }
+}
+
+// ЗОЛОТОЙ РИС (+5 TRC)
+function spawnGoldenGrain() {
+    if (!currentUser) return;
+    const grain = document.createElement('div');
+    grain.className = 'golden-grain';
+    grain.style.left = Math.random() * (window.innerWidth - 60) + 'px';
+    grain.innerHTML = '<i class="fas fa-gem"></i>+5';
+    
+    grain.onclick = () => {
+        db.ref(`users/${currentUser}`).transaction(u => {
+            if (u) { u.bal = (u.bal || 0) + 5; return u; }
+        });
+        showToast("🌟 CAUGHT GOLDEN RICE! +5 TRC", "gold-l");
+        updateQuestProgress('gold');
+        addLog(`Player ${currentUser} caught golden rice.`);
+        grain.remove();
+    };
+
+    document.body.appendChild(grain);
+    setTimeout(() => { if(grain) grain.remove(); }, 8000);
+}
+
+// РЕНДЕР ИНТЕРФЕЙСА
+function render() {
+    if (!currentUser) return;
+    const me = globalData.users?.[currentUser] || {};
+    const isAdmin = ["Админ", "Вождь", "Император"].includes(me.role);
+
+    document.getElementById('uName').innerText = currentUser;
+    document.getElementById('uBal').innerText = (me.bal || 0).toLocaleString();
+    document.getElementById('uRole').innerText = me.role || "Участник";
+    document.getElementById('uAvatar').src = `https://robohash.org/${currentUser}.png?set=set4&bgset=bg1`;
+    
+    if (isAdmin) document.getElementById('adminLink').style.display = "flex";
+
+    // XP
+    const lvl = Math.floor((me.xp || 0) / 1000) + 1;
+    const progress = ((me.xp || 0) % 1000) / 10;
+    document.getElementById('uLevel').innerText = lvl;
+    document.getElementById('uXPBar').style.width = progress + "%";
+    document.getElementById('uXPText').innerText = `${(me.xp || 0) % 1000} / 1000 XP TO NEXT RANK`;
+
+    // Квесты
+    const qCont = document.getElementById('questContainer');
+    qCont.innerHTML = "";
+    if (me.quests) {
+        me.quests.forEach(q => {
+            qCont.innerHTML += `
+                <div class="quest-card">
+                    <div style="display:flex; align-items:center; gap:15px;">
+                        <div style="background:var(--gold); color:#000; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:var(--glow-gold);">
+                            <i class="fas ${q.icon || 'fa-star'}"></i>
+                        </div>
+                        <div>
+                            <b style="font-size:13px; display:block; font-family:'Orbitron';">${q.text}</b>
+                            <span style="font-size:11px; color:var(--text-muted); font-weight:bold;">Progress: ${q.prog} / ${q.goal}</span>
+                        </div>
+                    </div>
+                    <div style="font-family:'Orbitron'; font-weight:900; color:var(--gold); font-size:14px; background:rgba(212,175,55,0.1); padding:8px 12px; border-radius:10px;">+${q.xp} XP</div>
+                </div>`;
+        });
+    }
+
+    // Инвентарь
+    const invDiv = document.getElementById('uInventory');
+    invDiv.innerHTML = "";
+    if (me.inv) {
+        Object.entries(me.inv).filter(([id, it]) => invFilter === 'All' || it.rarity === invFilter).forEach(([id, it]) => {
+            const expire = it.expire ? Math.ceil((it.expire - Date.now()) / 3600000) : 0;
+            const rarityColor = `var(--rarity-${(it.rarity || 'common').toLowerCase()})`;
+            invDiv.innerHTML += `
+                <div class="item-box" style="border-bottom-color: ${rarityColor}">
+                    <span style="font-size:10px; font-weight:900; color:${rarityColor}; letter-spacing:1px; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:8px;">${it.rarity.toUpperCase()}</span>
+                    <b style="font-size:15px; display:block; margin:15px 0; font-family:'Orbitron';">${it.name}</b>
+                    <div style="font-size:10px; color:var(--text-muted); margin-bottom:15px;"><i class="far fa-clock"></i> Expires in: ${expire}h</div>
+                    <button onclick="withdraw('${id}', '${it.name}')" style="padding:10px; font-size:10px;"><i class="fas fa-hand-holding-box"></i> WITHDRAW</button>
+                </div>`;
+        });
+    }
+
+    // Маркет
+    const isShopOpen = (globalData.shopExpire || 0) > Date.now();
+    const stDiv = document.getElementById('shopTimer');
+    if (isShopOpen) {
+        const diff = globalData.shopExpire - Date.now();
+        stDiv.innerHTML = `<i class="fas fa-door-open"></i> CLOSES IN: ${Math.floor(diff/3600000)}H ${Math.floor((diff%3600000)/60000)}M`;
+        stDiv.style.color = "var(--gold)";
+    } else { 
+        stDiv.innerHTML = `<i class="fas fa-door-closed"></i> CLOSED`; 
+        stDiv.style.color = "var(--rarity-mythic)";
+        stDiv.style.borderColor = "var(--rarity-mythic)";
+        stDiv.style.boxShadow = "0 0 15px rgba(231, 76, 60, 0.4)";
+    }
+
+    const sGrid = document.getElementById('shopGrid');
+    sGrid.innerHTML = "";
+    if (isShopOpen && globalData.stock) {
+        Object.entries(globalData.stock).forEach(([id, it]) => {
+            const rarityColor = `var(--rarity-${(it.rarity || 'common').toLowerCase()})`;
+            sGrid.innerHTML += `
+                <div class="item-box" style="border-bottom-color: ${rarityColor}">
+                    <span style="font-size:10px; font-weight:900; color:${rarityColor};">${it.rarity.toUpperCase()}</span>
+                    <h3 style="margin:15px 0; font-family:'Orbitron';">${it.name}</h3>
+                    <div style="font-size:24px; font-weight:900; color:var(--gold); text-shadow:var(--glow-gold); margin-bottom:5px;">${it.price} <i class="fas fa-coins" style="font-size:16px;"></i></div>
+                    <p style="font-size:10px; color:var(--text-muted); margin-bottom:15px;">Stock: ${it.qty}</p>
+                    <button onclick="buy('${id}')" ${it.qty <= 0 ? 'disabled' : ''}>
+                        ${it.qty > 0 ? '<i class="fas fa-shopping-cart"></i> BUY ITEM' : '<i class="fas fa-ban"></i> SOLD OUT'}
+                    </button>
+                </div>`;
+        });
+    }
+
+    // Чат
+    const chatBox = document.getElementById('chatBox');
+    chatBox.innerHTML = (globalData.chat || []).map(m => {
+        let icon = "fa-user";
+        if (m.r === "Админ" || m.r === "Император" || m.r === "Вождь") icon = "fa-crown";
+        if (m.u === "Sensei Rice") icon = "fa-robot";
+        
+        return `
+        <div class="msg ${m.u === 'Sensei Rice' ? 'bot' : (m.r === 'Админ' || m.r === 'Император' ? 'admin' : '')}">
+            <b style="font-size:12px; color:var(--gold); display:flex; align-items:center; gap:5px;">
+                <i class="fas ${icon}"></i> ${m.u} <small style="opacity:0.5; font-weight:normal;">[${m.r || 'Участник'}]</small>
+            </b>
+            <p style="margin:8px 0 0 0; font-size:14px; line-height:1.5;">${m.t}</p>
+        </div>`;
+    }).join('');
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    // Админка
+    if (isAdmin) {
+        document.getElementById('kernelLogs').innerHTML = (globalData.logs || []).reverse().map(l => `<div style="margin-bottom:5px;">> ${l}</div>`).join('');
+        document.getElementById('withdrawRequestsList').innerHTML = Object.entries(globalData.withdraws || {}).map(([id, r]) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:15px 20px; border-radius:15px; margin-bottom:10px; border:1px solid #27ae60;">
+                <span style="font-size:14px;"><i class="fas fa-user-circle" style="color:var(--gold);"></i> <b>${r.user}</b> -> <i class="fas fa-box"></i> <b>${r.item}</b></span>
+                <button onclick="completeWithdraw('${id}', '${r.user}', '${r.item}')" style="background:#27ae60; padding:10px 15px; width:auto;"><i class="fas fa-check"></i> CONFIRM</button>
+            </div>`).join('');
+    }
+}
+
+// ДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЯ
+function claimDaily() {
+    db.ref(`users/${currentUser}`).transaction(u => {
+        if (u) {
+            const now = Date.now();
+            if (now - (u.lastDaily || 0) < 86400000) return;
+            u.bal = (u.bal || 0) + 200;
+            u.xp = (u.xp || 0) + 50;
+            u.lastDaily = now;
+            return u;
+        }
+    }, (err, commit) => {
+        if (commit) {
+            showToast("DAILY BONUS CLAIMED! +200 TRC / +50 XP", "gold");
+            addLog(`Player ${currentUser} claimed daily.`);
+            updateQuestProgress('daily');
+        } else showToast("PLEASE WAIT 24 HOURS!", "rarity-mythic");
+    });
+}
+
+function buy(id) {
+    const item = globalData.stock[id];
+    if (!item || item.qty <= 0) return;
+    if (!confirm(`Purchase ${item.name} for ${item.price} TRC?`)) return;
+
+    db.ref(`users/${currentUser}`).transaction(u => {
+        if (u && u.bal >= item.price) {
+            u.bal -= item.price;
+            u.xp = (u.xp || 0) + 150;
+            if (!u.inv) u.inv = {};
+            u.inv[Date.now()] = { name: item.name, rarity: item.rarity, expire: Date.now() + (3 * 86400000) };
+            db.ref(`stock/${id}/qty`).set(item.qty - 1);
+            return u;
+        }
+    }, (err, commit) => {
+        if (commit) {
+            showToast(`SUCCESSFULLY PURCHASED: ${item.name}`, "rarity-rare");
+            addLog(`Player ${currentUser} bought ${item.name}.`);
+            updateQuestProgress('buy');
+            updateQuestProgress('spend', item.price);
+        } else showToast("INSUFFICIENT FUNDS!", "rarity-mythic");
+    });
+}
+
+function withdraw(id, name) {
+    if (confirm(`Withdraw "${name}"? It will be removed from your inventory.`)) {
+        db.ref(`users/${currentUser}/inv/${id}`).remove();
+        db.ref('withdraws').push({ user: currentUser, item: name, time: Date.now() });
+        showToast("WITHDRAWAL REQUEST SENT TO OVERLORD", "gold");
+        addLog(`Player ${currentUser} requested withdraw: ${name}`);
+        updateQuestProgress('withdraw');
+    }
+}
+
+// ЧАТ
+function sendChat() {
+    const now = Date.now();
+    if (now - lastChatTime < 1500) return showToast("DO NOT SPAM!", "rarity-mythic");
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const chat = globalData.chat || [];
+    const myRole = globalData.users[currentUser].role;
+    chat.push({ u: currentUser, t: msg, r: myRole });
+    if (chat.length > 50) chat.shift();
+    db.ref('chat').set(chat);
+    
+    if (msg.startsWith('!')) {
+        setTimeout(() => senseiLogic(msg.toLowerCase()), 800);
+    }
+
+    updateQuestProgress('msg');
+    input.value = "";
+    lastChatTime = now;
+}
+
+function senseiLogic(cmd) {
+    let reply = "";
+    if (cmd.includes('совет')) {
+        const tips = [
+            "Каждое зерно делает тебя ближе к Императору.", 
+            "Не трать TRC на эмоциях, жди легендарных артефактов.", 
+            "Путь самурая извилист, но TRC ведет к истине."
+        ];
+        reply = tips[Math.floor(Math.random()*tips.length)];
+    } else if (cmd.includes('курс')) {
+        reply = `Текущий индекс биржи: ${Math.floor(Math.random()*20 + 90)} TRC за мешок. Тренд положительный.`;
+    } else if (cmd.includes('инфо')) {
+        reply = "Я — ИИ Сэнсэй. Слежу за порядком и наставляю воинов. Пиши !совет или !курс.";
+    }
+
+    if (reply) {
+        const chat = globalData.chat || [];
+        chat.push({ u: "Sensei Rice", t: reply, r: "SYSTEM AI" });
+        db.ref('chat').set(chat);
+    }
+}
+
+// АДМИН ПАНЕЛЬ
+function admEconomy(plus) {
+    const t = document.getElementById('admUser').value;
+    const a = parseInt(document.getElementById('admAmount').value);
+    if (!t || !a) return showToast("ENTER TARGET AND AMOUNT", "rarity-mythic");
+    db.ref(`users/${t}/bal`).transaction(b => plus ? (b || 0) + a : Math.max(0, (b || 0) - a));
+    addLog(`OVERLORD: ${plus ? 'Granted' : 'Revoked'} ${a} TRC for ${t}.`);
+    showToast("ECONOMY UPDATED", "gold");
+}
+
+function admSetRole() {
+    const t = document.getElementById('admUser').value;
+    const r = document.getElementById('admRoleSelect').value;
+    if (!t) return showToast("ENTER TARGET NICKNAME", "rarity-mythic");
+    db.ref(`users/${t}/role`).set(r);
+    addLog(`OVERLORD: Role [${r}] assigned to ${t}.`);
+    showToast("ROLE UPDATED", "gold");
+}
+
+function admDeleteUser() {
+    const t = document.getElementById('admUser').value;
+    if (t && confirm(`PURGE ${t} PERMANENTLY?`)) {
+        db.ref(`users/${t}`).remove();
+        addLog(`OVERLORD: Purged ${t} from existence.`);
+        showToast("USER PURGED", "rarity-mythic");
+    }
+}
+
+function admAddItem() {
+    const n = document.getElementById('shName').value, 
+          p = parseInt(document.getElementById('shPrice').value), 
+          s = parseInt(document.getElementById('shStock').value), 
+          r = document.getElementById('shRarity').value;
+    if (n && p) {
+        db.ref('stock').push({ name: n, price: p, qty: s, rarity: r });
+        addLog(`OVERLORD: Added ${n} to market.`);
+        showToast("ITEM ADDED TO MARKET", "gold");
+    }
+}
+
+function admToggleShop() {
+    const isOpen = globalData.shopExpire > Date.now();
+    db.ref('shopExpire').set(isOpen ? 0 : Date.now() + (24 * 3600000));
+    addLog(`OVERLORD: Market ${isOpen ? 'Closed' : 'Opened'}.`);
+}
+
+function admClearShop() {
+    if (confirm("WIPE ENTIRE MARKET?")) {
+        db.ref('stock').remove();
+        addLog("OVERLORD: Market wiped.");
+    }
+}
+
+function completeWithdraw(id, user, item) {
+    db.ref(`withdraws/${id}`).remove();
+    addLog(`OVERLORD: Confirmed withdrawal of ${item} for ${user}.`);
+    showToast(`WITHDRAWAL FOR ${user} CONFIRMED!`, "rarity-rare");
+}
+
+function addLog(m) {
+    const l = globalData.logs || [];
+    l.push(`[${new Date().toLocaleTimeString()}] ${m}`);
+    if (l.length > 100) l.shift();
+    db.ref('logs').set(l);
+}
+
+// СИСТЕМА
+function switchTab(id, el) {
+    document.querySelectorAll('.container').forEach(c => c.classList.remove('active-tab'));
+    document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+    document.getElementById(id).classList.add('active-tab');
+    el.classList.add('active');
+}
+
+function setInvFilter(r, el) {
+    invFilter = r;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    render();
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const target = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', target);
+}
+
+function logout() {
+    localStorage.removeItem('trc_session');
+    location.reload();
+}
+
+// АНИМАЦИЯ РИСА (КРУПНАЯ И ЯРКАЯ)
+const canvas = document.getElementById('riceCanvas'), ctx = canvas.getContext('2d');
+let grains = [];
+function initRice() {
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    for(let i=0; i<80; i++) grains.push({ 
+        x: Math.random()*canvas.width, 
+        y: Math.random()*canvas.height, 
+        s: Math.random()*4+2, 
+        r: Math.random()*Math.PI,
+        sp: Math.random()*1 + 0.5 
+    });
+    anim();
+}
+function anim() {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    ctx.fillStyle = isDark ? "rgba(212, 175, 55, 0.8)" : "rgba(180, 150, 50, 0.5)"; 
+    grains.forEach(g => {
+        g.y += g.sp; if(g.y > canvas.height) g.y = -20;
+        ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(g.r);
+        
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = isDark ? "rgba(212, 175, 55, 0.5)" : "transparent";
+        
+        ctx.beginPath(); ctx.ellipse(0,0, g.s*4, g.s*1.2, 0,0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    });
+    requestAnimationFrame(anim);
+}
+
+window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+initRice();
+
+if (currentUser) init(currentUser);
+</script>
+</body>
+</html>
